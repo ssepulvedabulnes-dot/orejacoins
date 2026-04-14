@@ -11,6 +11,7 @@ const SidebarComponent = {
             { key: 'transfer',  label: 'Transferir', icon: '💸' },
             { key: 'store',     label: 'Tienda',     icon: '🛍️' },
             { key: 'missions',  label: 'Misiones',   icon: '🎯', badge: pendingMissions },
+            { key: 'arcade',    label: 'Arcade',     icon: '🎮' },
         ];
 
         const adminItems = user?.is_admin ? [

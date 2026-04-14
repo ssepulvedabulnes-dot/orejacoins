@@ -123,6 +123,11 @@ const App = {
                 MissionsComponent.attachEvents();
                 break;
 
+            case 'arcade':
+                container.innerHTML = ArcadeComponent.render();
+                ArcadeComponent.attachEvents();
+                break;
+
             case 'admin':
                 if (this.currentUser?.is_admin) {
                     AdminComponent.data.loading = true;

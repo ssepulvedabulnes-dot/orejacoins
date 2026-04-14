@@ -93,31 +93,38 @@ router.get('/history', authMiddleware, async (req, res) => {
 router.get('/weekly', authMiddleware, async (req, res) => {
     const db = getDB();
 
-    const stats = await db.all(`
-        SELECT 
-            strftime('%w', created_at) as day_of_week,
-            SUM(CASE WHEN type = 'transfer' THEN amount ELSE 0 END) as transfers,
-            SUM(CASE WHEN type = 'purchase' THEN amount ELSE 0 END) as purchases,
-            SUM(CASE WHEN type = 'mission_reward' THEN amount ELSE 0 END) as missions
-        FROM transactions
-        WHERE (from_user_id = ? OR to_user_id = ?)
-            AND created_at >= datetime('now', '-7 days')
-        GROUP BY day_of_week
-        ORDER BY day_of_week
-    `, req.user.id, req.user.id);
+    try {
+        const stats = await db.all(`
+            SELECT 
+                EXTRACT(DOW FROM created_at) as day_of_week,
+                SUM(CASE WHEN type = 'transfer' THEN amount ELSE 0 END) as transfers,
+                SUM(CASE WHEN type = 'purchase' THEN amount ELSE 0 END) as purchases,
+                SUM(CASE WHEN type = 'mission_reward' THEN amount ELSE 0 END) as missions
+            FROM transactions
+            WHERE (from_user_id = ? OR to_user_id = ?)
+                AND created_at >= NOW() - INTERVAL '7 days'
+            GROUP BY day_of_week
+            ORDER BY day_of_week
+        `, req.user.id, req.user.id);
 
-    const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-    const weeklyData = days.map((name, i) => {
-        const dayStats = stats.find(s => parseInt(s.day_of_week) === i);
-        return {
-            day: name,
-            transfers: dayStats ? dayStats.transfers : 0,
-            purchases: dayStats ? dayStats.purchases : 0,
-            missions: dayStats ? dayStats.missions : 0
-        };
-    });
+        const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const weeklyData = days.map((name, i) => {
+            const dayStats = stats.find(s => parseInt(s.day_of_week) === i);
+            return {
+                day: name,
+                transfers: dayStats ? dayStats.transfers : 0,
+                purchases: dayStats ? dayStats.purchases : 0,
+                missions: dayStats ? dayStats.missions : 0
+            };
+        });
 
-    res.json(weeklyData);
+        res.json(weeklyData);
+    } catch (err) {
+        console.error('Error fetching weekly stats:', err.message);
+        // Return empty data instead of crashing
+        const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        res.json(days.map(day => ({ day, transfers: 0, purchases: 0, missions: 0 })));
+    }
 });
 
 // ── AUTO MISSION CHECK ──────────────────────────────────────────────────────────

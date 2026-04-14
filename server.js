@@ -27,6 +27,7 @@ async function start() {
     app.use('/api/transfers', require('./routes/transfers'));
     app.use('/api/store', require('./routes/store'));
     app.use('/api/missions', require('./routes/missions'));
+    app.use('/api/arcade', require('./routes/arcade'));
 
     // ── Health Check ────────────────────────────────────────────────────────────
     app.get('/api/health', (req, res) => {

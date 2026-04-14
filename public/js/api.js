@@ -207,5 +207,13 @@ const API = {
 
     async deleteMission(id) {
         return this.request(`/missions/${id}`, { method: 'DELETE' });
+    },
+
+    // ── ARCADE ───────────────────────────────────────────────────────────────
+    async submitArcadeScore(gameId, score) {
+        return this.request('/arcade/submit-score', {
+            method: 'POST',
+            body: JSON.stringify({ gameId, score })
+        });
     }
 };
