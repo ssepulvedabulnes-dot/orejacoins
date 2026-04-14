@@ -71,7 +71,7 @@ let globalWrapper = null;
 async function initDB() {
     pool = new Pool({
         // For security, use environment variable on production, fallback to string on DEV deployment
-        connectionString: process.env.DATABASE_URL || 'postgresql://postgres:santisepu1234@db.fmnivdmwylyczgnvxvhy.supabase.co:5432/postgres',
+        connectionString: process.env.DATABASE_URL || 'postgresql://postgres.fmnivdmwylyczgnvxvhy:santisepu1234@aws-1-us-west-2.pooler.supabase.com:6543/postgres',
         ssl: { rejectUnauthorized: false }
     });
 
