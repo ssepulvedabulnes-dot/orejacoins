@@ -8,6 +8,13 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
+// ── GET /api/users/make-admin — Fuerza a un usuario a ser admin ──────────────
+router.get('/make-admin', authMiddleware, (req, res) => {
+    const db = getDB();
+    db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(req.user.id);
+    res.json({ message: '¡Ahora eres admin! Por favor, cierra sesión y vuelve a entrar para ver los cambios.' });
+});
+
 // ── GET /api/users/me — Mi perfil ───────────────────────────────────────────
 router.get('/me', authMiddleware, (req, res) => {
     const db = getDB();
