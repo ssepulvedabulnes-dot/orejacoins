@@ -1,6 +1,10 @@
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const dns = require('dns');
+
+// Force Node.js to use IPv4 first to prevent ENETUNREACH errors on Render with Supabase's IPv6
+dns.setDefaultResultOrder('ipv4first');
 
 let pool = null;
 
