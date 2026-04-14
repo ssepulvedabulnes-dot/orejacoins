@@ -9,7 +9,7 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 
 // ── POST /api/transfers — Enviar OrejaCoins ─────────────────────────────────
-router.post('/', authMiddleware, (req, res) => {
+router.post('/', authMiddleware, async (req, res) => {
     const { to_user_id, amount, note, image_data } = req.body;
 
     if (!to_user_id || !amount) {
@@ -27,23 +27,21 @@ router.post('/', authMiddleware, (req, res) => {
 
     const db = getDB();
 
-    const transfer = db.transaction(() => {
-        const sender = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
-        const receiver = db.prepare('SELECT * FROM users WHERE id = ?').get(to_user_id);
+    const transfer = async () => { return await db.transaction(async (tx) => {
+        const sender = await tx.get('SELECT * FROM users WHERE id = ?', req.user.id);
+        const receiver = await tx.get('SELECT * FROM users WHERE id = ?', to_user_id);
 
         if (!sender) throw new Error('Remitente no encontrado');
         if (!receiver) throw new Error('Destinatario no encontrado');
         if (sender.balance < parsedAmount) throw new Error('Saldo insuficiente');
 
         // Deduct from sender
-        db.prepare('UPDATE users SET balance = balance - ? WHERE id = ?').run(parsedAmount, req.user.id);
+        await tx.run('UPDATE users SET balance = balance - ? WHERE id = ?', parsedAmount, req.user.id);
         // Add to receiver
-        db.prepare('UPDATE users SET balance = balance + ? WHERE id = ?').run(parsedAmount, to_user_id);
+        await tx.run('UPDATE users SET balance = balance + ? WHERE id = ?', parsedAmount, to_user_id);
 
         // Record transaction
-        const result = db.prepare(
-            'INSERT INTO transactions (from_user_id, to_user_id, amount, type, note, image_data) VALUES (?, ?, ?, ?, ?, ?)'
-        ).run(req.user.id, to_user_id, parsedAmount, 'transfer', note || 'Transferencia', image_data || null);
+        const result = await tx.run('INSERT INTO transactions (from_user_id, to_user_id, amount, type, note, image_data) VALUES (?, ?, ?, ?, ?, ?)', req.user.id, to_user_id, parsedAmount, 'transfer', note || 'Transferencia', image_data || null);
 
         return {
             transaction_id: result.lastInsertRowid,
@@ -51,12 +49,12 @@ router.post('/', authMiddleware, (req, res) => {
             receiver: receiver.display_name,
             amount: parsedAmount
         };
-    });
+    }); };
 
     try {
-        const result = transfer();
+        const result = await transfer();
         // Check auto-missions after transfer
-        checkAutoMissions(db, req.user.id);
+        await checkAutoMissions(db, req.user.id);
 
         res.json({
             message: `✅ ${result.amount} OC enviados a ${result.receiver}`,
@@ -68,12 +66,12 @@ router.post('/', authMiddleware, (req, res) => {
 });
 
 // ── GET /api/transfers/history — My transactions ────────────────────────────
-router.get('/history', authMiddleware, (req, res) => {
+router.get('/history', authMiddleware, async (req, res) => {
     const db = getDB();
     const limit = parseInt(req.query.limit) || 50;
     const offset = parseInt(req.query.offset) || 0;
 
-    const transactions = db.prepare(`
+    const transactions = await db.all(`
         SELECT 
             t.id, t.amount, t.type, t.note, t.image_data, t.created_at,
             sender.display_name as from_name, sender.avatar as from_avatar, sender.id as from_id,
@@ -84,20 +82,18 @@ router.get('/history', authMiddleware, (req, res) => {
         WHERE t.from_user_id = ? OR t.to_user_id = ?
         ORDER BY t.created_at DESC
         LIMIT ? OFFSET ?
-    `).all(req.user.id, req.user.id, limit, offset);
+    `, req.user.id, req.user.id, limit, offset);
 
-    const total = db.prepare(
-        'SELECT COUNT(*) as count FROM transactions WHERE from_user_id = ? OR to_user_id = ?'
-    ).get(req.user.id, req.user.id).count;
+    const total = (await db.get('SELECT COUNT(*) as count FROM transactions WHERE from_user_id = ? OR to_user_id = ?', req.user.id, req.user.id)).count;
 
     res.json({ transactions, total, limit, offset });
 });
 
 // ── GET /api/transfers/weekly — Weekly activity stats ────────────────────────
-router.get('/weekly', authMiddleware, (req, res) => {
+router.get('/weekly', authMiddleware, async (req, res) => {
     const db = getDB();
 
-    const stats = db.prepare(`
+    const stats = await db.all(`
         SELECT 
             strftime('%w', created_at) as day_of_week,
             SUM(CASE WHEN type = 'transfer' THEN amount ELSE 0 END) as transfers,
@@ -108,7 +104,7 @@ router.get('/weekly', authMiddleware, (req, res) => {
             AND created_at >= datetime('now', '-7 days')
         GROUP BY day_of_week
         ORDER BY day_of_week
-    `).all(req.user.id, req.user.id);
+    `, req.user.id, req.user.id);
 
     const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
     const weeklyData = days.map((name, i) => {
@@ -125,31 +121,21 @@ router.get('/weekly', authMiddleware, (req, res) => {
 });
 
 // ── AUTO MISSION CHECK ──────────────────────────────────────────────────────────
-function checkAutoMissions(db, userId) {
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+async function checkAutoMissions(db, userId) {
+    const user = await db.get('SELECT * FROM users WHERE id = ?', userId);
     if (!user) return;
 
-    const missions = db.prepare(
-        "SELECT * FROM missions WHERE type = 'auto' AND is_active = 1"
-    ).all();
+    const missions = await db.all("SELECT * FROM missions WHERE type = 'auto' AND is_active = 1");
 
-    const transfersSent = db.prepare(
-        "SELECT COUNT(*) as count FROM transactions WHERE from_user_id = ? AND type = 'transfer'"
-    ).get(userId).count;
+    const transfersSent = (await db.get("SELECT COUNT(*) as count FROM transactions WHERE from_user_id = ? AND type = 'transfer'", userId)).count;
 
-    const purchasesCount = db.prepare(
-        'SELECT COUNT(*) as count FROM user_purchases WHERE user_id = ?'
-    ).get(userId).count;
+    const purchasesCount = (await db.get('SELECT COUNT(*) as count FROM user_purchases WHERE user_id = ?', userId)).count;
 
-    const uniqueRecipients = db.prepare(
-        "SELECT COUNT(DISTINCT to_user_id) as count FROM transactions WHERE from_user_id = ? AND type = 'transfer'"
-    ).get(userId).count;
+    const uniqueRecipients = (await db.get("SELECT COUNT(DISTINCT to_user_id) as count FROM transactions WHERE from_user_id = ? AND type = 'transfer'", userId)).count;
 
     for (const mission of missions) {
         // Check if already completed/claimed
-        const existing = db.prepare(
-            'SELECT * FROM user_missions WHERE user_id = ? AND mission_id = ?'
-        ).get(userId, mission.id);
+        const existing = await db.get('SELECT * FROM user_missions WHERE user_id = ? AND mission_id = ?', userId, mission.id);
 
         if (existing && (existing.status === 'completed' || existing.status === 'claimed')) continue;
 
@@ -176,13 +162,9 @@ function checkAutoMissions(db, userId) {
 
         if (conditionMet) {
             if (existing) {
-                db.prepare(
-                    "UPDATE user_missions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE user_id = ? AND mission_id = ?"
-                ).run(userId, mission.id);
+                await db.run("UPDATE user_missions SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE user_id = ? AND mission_id = ?", userId, mission.id);
             } else {
-                db.prepare(
-                    "INSERT INTO user_missions (user_id, mission_id, status, completed_at) VALUES (?, ?, 'completed', CURRENT_TIMESTAMP)"
-                ).run(userId, mission.id);
+                await db.run("INSERT INTO user_missions (user_id, mission_id, status, completed_at) VALUES (?, ?, 'completed', CURRENT_TIMESTAMP)", userId, mission.id);
             }
         }
     }

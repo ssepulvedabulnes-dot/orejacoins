@@ -10,7 +10,7 @@ const { getDB } = require('../database/db');
 const router = express.Router();
 
 // ── REGISTRO ────────────────────────────────────────────────────────────────────
-router.post('/register', (req, res) => {
+router.post('/register', async (req, res) => {
     const { username, password, display_name, avatar } = req.body;
 
     if (!username || !password || !display_name) {
@@ -28,23 +28,21 @@ router.post('/register', (req, res) => {
     const db = getDB();
 
     // Check if username already exists
-    const existing = db.prepare('SELECT id FROM users WHERE username = ?').get(username);
+    const existing = await db.get('SELECT id FROM users WHERE username = ?', username);
     if (existing) {
         return res.status(409).json({ error: 'El username ya está en uso' });
     }
 
     // First user becomes admin automatically
-    const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+    const userCount = ((await db.get('SELECT COUNT(*) as count FROM users'))).count;
     const isAdmin = userCount === 0 ? 1 : 0;
 
     const passwordHash = bcrypt.hashSync(password, 10);
     const initialBalance = parseInt(process.env.INITIAL_BALANCE) || 500;
 
-    const result = db.prepare(
-        'INSERT INTO users (username, password_hash, display_name, avatar, balance, is_admin) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(username, passwordHash, display_name, avatar || '🦊', initialBalance, isAdmin);
+    const result = await db.run('INSERT INTO users (username, password_hash, display_name, avatar, balance, is_admin) VALUES (?, ?, ?, ?, ?, ?)', username, passwordHash, display_name, avatar || '🦊', initialBalance, isAdmin);
 
-    const user = db.prepare('SELECT id, username, display_name, avatar, balance, is_admin, created_at FROM users WHERE id = ?').get(result.lastInsertRowid);
+    const user = await db.get('SELECT id, username, display_name, avatar, balance, is_admin, created_at FROM users WHERE id = ?', result.lastInsertRowid);
 
     // Generate JWT
     const token = jwt.sign(
@@ -61,7 +59,7 @@ router.post('/register', (req, res) => {
 });
 
 // ── LOGIN ───────────────────────────────────────────────────────────────────────
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -69,7 +67,7 @@ router.post('/login', (req, res) => {
     }
 
     const db = getDB();
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    const user = await db.get('SELECT * FROM users WHERE username = ?', username);
 
     if (!user) {
         return res.status(401).json({ error: 'Usuario no encontrado' });

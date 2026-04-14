@@ -1,204 +1,102 @@
-// ═══════════════════════════════════════════════════════════════════════════════
-// OREJACOINS — Database Connection & Helpers (sql.js — pure WASM, no native build)
-// ═══════════════════════════════════════════════════════════════════════════════
-
-const initSqlJs = require('sql.js');
+const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', process.env.DB_NAME || 'orejacoins.db');
-const SCHEMA_PATH = path.join(__dirname, 'schema.sql');
+let pool = null;
 
-let db = null;
-let saveTimer = null;
-
-// ── Compatibility wrapper: mimics better-sqlite3 API on top of sql.js ────────
-class PreparedStatement {
-    constructor(sqlDb, sql) {
-        this.sqlDb = sqlDb;
-        this.sql = sql;
-    }
-
-    /**
-     * Execute and return the first matching row as an object
-     */
-    get(...params) {
-        const stmt = this.sqlDb.prepare(this.sql);
-        try {
+// Wrap a client or pool to have SQLite-like method signatures but async!
+function createDbWrapper(clientOrPool) {
+    return {
+        async get(sql, ...params) {
             if (params.length === 1 && Array.isArray(params[0])) params = params[0];
-            if (params.length > 0) stmt.bind(params);
-            if (stmt.step()) {
-                return stmt.getAsObject();
-            }
-            return undefined;
-        } finally {
-            stmt.free();
-        }
-    }
-
-    /**
-     * Execute and return all matching rows as an array of objects
-     */
-    all(...params) {
-        const stmt = this.sqlDb.prepare(this.sql);
-        try {
+            let i = 1; 
+            const pgSql = sql.replace(/\?/g, () => `$${i++}`);
+            const res = await clientOrPool.query(pgSql, params);
+            return res.rows[0];
+        },
+        async all(sql, ...params) {
             if (params.length === 1 && Array.isArray(params[0])) params = params[0];
-            if (params.length > 0) stmt.bind(params);
-            const results = [];
-            while (stmt.step()) {
-                results.push(stmt.getAsObject());
+            let i = 1; 
+            const pgSql = sql.replace(/\?/g, () => `$${i++}`);
+            const res = await clientOrPool.query(pgSql, params);
+            return res.rows;
+        },
+        async run(sql, ...params) {
+            if (params.length === 1 && Array.isArray(params[0])) params = params[0];
+            let i = 1; 
+            let pgSql = sql.replace(/\?/g, () => `$${i++}`);
+            
+            // If it's an INSERT, we often need the lastInsertRowid.
+            // In Postgres, we append "RETURNING id" if not present.
+            if (pgSql.trim().toUpperCase().startsWith('INSERT') && !pgSql.toUpperCase().includes('RETURNING')) {
+                pgSql += ' RETURNING id';
             }
-            return results;
-        } finally {
-            stmt.free();
-        }
-    }
-
-    /**
-     * Execute statement (INSERT/UPDATE/DELETE) and return { changes, lastInsertRowid }
-     */
-    run(...params) {
-        if (params.length === 1 && Array.isArray(params[0])) params = params[0];
-        if (params.length > 0) {
-            this.sqlDb.run(this.sql, params);
-        } else {
-            this.sqlDb.run(this.sql);
-        }
-        const changes = this.sqlDb.getRowsModified();
-        // Get last insert rowid
-        const lastStmt = this.sqlDb.prepare('SELECT last_insert_rowid() as id');
-        let lastInsertRowid = 0;
-        if (lastStmt.step()) {
-            lastInsertRowid = lastStmt.getAsObject().id;
-        }
-        lastStmt.free();
-
-        // Schedule save to disk
-        scheduleSave();
-
-        return { changes, lastInsertRowid };
-    }
-}
-
-class DatabaseWrapper {
-    constructor(sqlDb) {
-        this.sqlDb = sqlDb;
-    }
-
-    prepare(sql) {
-        return new PreparedStatement(this.sqlDb, sql);
-    }
-
-    exec(sql) {
-        this.sqlDb.exec(sql);
-        scheduleSave();
-    }
-
-    pragma(pragmaStr) {
-        try {
-            this.sqlDb.exec(`PRAGMA ${pragmaStr}`);
-        } catch (e) {
-            // Some pragmas aren't supported in sql.js (like WAL)
-        }
-    }
-
-    transaction(fn) {
-        const self = this;
-        return function (...args) {
-            self.sqlDb.exec('BEGIN TRANSACTION');
-            try {
-                const result = fn(...args);
-                self.sqlDb.exec('COMMIT');
-                scheduleSave();
-                return result;
-            } catch (e) {
-                self.sqlDb.exec('ROLLBACK');
-                throw e;
+            
+            const res = await clientOrPool.query(pgSql, params);
+            return {
+                changes: res.rowCount,
+                lastInsertRowid: res.rows[0]?.id
+            };
+        },
+        async transaction(callbackAsync) {
+            // Only a Pool can connect a client for a raw transaction
+            if (clientOrPool.connect) {
+                const client = await clientOrPool.connect();
+                try {
+                    await client.query('BEGIN');
+                    const txWrapper = createDbWrapper(client);
+                    const result = await callbackAsync(txWrapper);
+                    await client.query('COMMIT');
+                    return result;
+                } catch (err) {
+                    await client.query('ROLLBACK');
+                    throw err;
+                } finally {
+                    client.release();
+                }
+            } else {
+                // If it's already a client (nested transaction?), just run it
+                return await callbackAsync(createDbWrapper(clientOrPool));
             }
-        };
-    }
-
-    close() {
-        saveToDisk();
-        if (saveTimer) clearTimeout(saveTimer);
-        this.sqlDb.close();
-    }
+        }
+    };
 }
 
-/**
- * Save database to disk (debounced)
- */
-function scheduleSave() {
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(saveToDisk, 500);
-}
+let globalWrapper = null;
 
-function saveToDisk() {
-    if (!db) return;
-    try {
-        const data = db.sqlDb.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(DB_PATH, buffer);
-    } catch (e) {
-        console.error('❌ Error saving database:', e.message);
-    }
-}
-
-/**
- * Initializes the database connection and runs the schema
- */
 async function initDB() {
-    const SQL = await initSqlJs();
+    pool = new Pool({
+        // For security, use environment variable on production, fallback to string on DEV deployment
+        connectionString: process.env.DATABASE_URL || 'postgresql://postgres:santisepu1234@db.fmnivdmwylyczgnvxvhy.supabase.co:5432/postgres',
+        ssl: { rejectUnauthorized: false }
+    });
 
-    // Load existing database or create new one
-    let sqlDb;
-    if (fs.existsSync(DB_PATH)) {
-        const fileBuffer = fs.readFileSync(DB_PATH);
-        sqlDb = new SQL.Database(fileBuffer);
-        console.log('📂 Loaded existing database from', DB_PATH);
-    } else {
-        sqlDb = new SQL.Database();
-        console.log('🆕 Created new database');
+    console.log('🔄 Conectando a Supabase PostgreSQL... (Esto puede tomar unos segundos)');
+    await pool.query('SELECT 1');
+    console.log('✅ Conectado a la base de datos Supabase correctamente!');
+
+    globalWrapper = createDbWrapper(pool); // Use Pool as base
+
+    try {
+        const schema = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+        await pool.query(schema);
+        console.log('✅ Esquema verificado en Postgres');
+    } catch (e) {
+        console.error('Error aplicando esquema Postgres:', e);
     }
 
-    db = new DatabaseWrapper(sqlDb);
-
-    // Enable foreign keys
-    db.pragma('foreign_keys = ON');
-
-    // Run schema
-    const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
-    db.exec(schema);
-
-    // Migrations to add image_data fields dynamically if missing
-    try { db.exec("ALTER TABLE transactions ADD COLUMN image_data TEXT;"); } catch(e) {}
-    try { db.exec("ALTER TABLE missions ADD COLUMN image_data TEXT;"); } catch(e) {}
-
-    // Save initial state
-    saveToDisk();
-
-    console.log('✅ Database initialized at', DB_PATH);
-    return db;
+    return globalWrapper;
 }
 
-/**
- * Returns the database instance
- */
 function getDB() {
-    if (!db) {
-        throw new Error('Database not initialized. Call initDB() first.');
-    }
-    return db;
+    if (!globalWrapper) throw new Error('Database not initialized. Call initDB() first.');
+    return globalWrapper;
 }
 
-/**
- * Closes the database connection gracefully
- */
 function closeDB() {
-    if (db) {
-        db.close();
-        db = null;
-        console.log('🔒 Database connection closed');
+    if (pool) {
+        pool.end();
+        globalWrapper = null;
     }
 }
 
