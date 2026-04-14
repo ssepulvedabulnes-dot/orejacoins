@@ -1,0 +1,4 @@
+node_modules/
+orejacoins.db
+.env
+*.log
