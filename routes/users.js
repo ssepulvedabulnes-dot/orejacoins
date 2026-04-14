@@ -8,11 +8,14 @@ const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 
-// ── GET /api/users/make-admin — Fuerza a un usuario a ser admin ──────────────
-router.get('/make-admin', authMiddleware, (req, res) => {
+// ── GET /api/users/make-admin?username=X — Fuerza a un usuario a ser admin ────────
+router.get('/make-admin', (req, res) => {
+    const { username } = req.query;
+    if (!username) return res.status(400).json({ error: 'Debes pasar el ?username=' });
     const db = getDB();
-    db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(req.user.id);
-    res.json({ message: '¡Ahora eres admin! Por favor, cierra sesión y vuelve a entrar para ver los cambios.' });
+    const result = db.prepare('UPDATE users SET is_admin = 1 WHERE username = ?').run(username);
+    if (result.changes === 0) return res.status(404).json({ error: 'Usuario no encontrado. Asegúrate de que el username sea exacto.' });
+    res.send(`<h1>¡Éxito!</h1><p>El usuario <b>${username}</b> ahora es Administrador. Por favor vuelve a la app, <b>cierra sesión y vuelve a ingresar</b> para activarlo.</p>`);
 });
 
 // ── GET /api/users/me — Mi perfil ───────────────────────────────────────────
