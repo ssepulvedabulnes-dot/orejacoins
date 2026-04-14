@@ -68,21 +68,28 @@ const ArcadeGames = {
         const platformH = 12;
 
         // Generate initial platforms
-        for (let i = 0; i < 8; i++) {
+        let currentY = H - 80;
+        platforms.push({
+            x: player.x - 15,
+            y: currentY,
+            w: platformW,
+            h: platformH,
+            type: 'static',
+            vx: 0,
+        });
+
+        // Keep generating platforms until well above the screen
+        while (currentY > -H) {
+            currentY -= (60 + Math.random() * 40); // 60 to 100px gap
             platforms.push({
                 x: Math.random() * (W - platformW),
-                y: H - 80 - i * 75,
+                y: currentY,
                 w: platformW,
                 h: platformH,
                 type: Math.random() < 0.15 ? 'moving' : 'static',
                 vx: (Math.random() < 0.5 ? 1 : -1) * 1.5,
             });
         }
-
-        // Make sure there's a starting platform
-        platforms[0].x = player.x - 15;
-        platforms[0].y = H - 60;
-        platforms[0].type = 'static';
 
         player.vy = player.jumpForce;
 
