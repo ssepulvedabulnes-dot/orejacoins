@@ -63,6 +63,7 @@ const MissionsComponent = {
                                     <div class="mission-info">
                                         <div class="mission-name">${m.name}</div>
                                         <div class="mission-desc">${m.description}</div>
+                                        ${m.image_data ? `<img src="${m.image_data}" alt="" style="max-width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-top: 8px;">` : ''}
                                     </div>
                                     <div class="mission-reward">+${m.reward} OC →</div>
                                 </div>
@@ -82,6 +83,7 @@ const MissionsComponent = {
                                     <div class="mission-info">
                                         <div class="mission-name">${m.name}</div>
                                         <div class="mission-desc">${m.description}</div>
+                                        ${m.image_data ? `<img src="${m.image_data}" alt="" style="max-width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-top: 8px;">` : ''}
                                     </div>
                                     <div class="mission-reward">${m.reward} OC</div>
                                 </div>
@@ -101,6 +103,7 @@ const MissionsComponent = {
                                     <div class="mission-info">
                                         <div class="mission-name">${m.name}</div>
                                         <div class="mission-desc">${m.description}</div>
+                                        ${m.image_data ? `<img src="${m.image_data}" alt="" style="max-width: 100%; height: 80px; object-fit: cover; border-radius: 8px; margin-top: 8px; opacity: 0.5;">` : ''}
                                     </div>
                                     <span class="mission-done-badge">✓ +${m.reward} OC</span>
                                 </div>

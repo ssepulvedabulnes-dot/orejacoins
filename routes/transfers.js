@@ -10,7 +10,7 @@ const router = express.Router();
 
 // ── POST /api/transfers — Enviar OrejaCoins ─────────────────────────────────
 router.post('/', authMiddleware, (req, res) => {
-    const { to_user_id, amount, note } = req.body;
+    const { to_user_id, amount, note, image_data } = req.body;
 
     if (!to_user_id || !amount) {
         return res.status(400).json({ error: 'to_user_id y amount son requeridos' });
@@ -42,8 +42,8 @@ router.post('/', authMiddleware, (req, res) => {
 
         // Record transaction
         const result = db.prepare(
-            'INSERT INTO transactions (from_user_id, to_user_id, amount, type, note) VALUES (?, ?, ?, ?, ?)'
-        ).run(req.user.id, to_user_id, parsedAmount, 'transfer', note || 'Transferencia');
+            'INSERT INTO transactions (from_user_id, to_user_id, amount, type, note, image_data) VALUES (?, ?, ?, ?, ?, ?)'
+        ).run(req.user.id, to_user_id, parsedAmount, 'transfer', note || 'Transferencia', image_data || null);
 
         return {
             transaction_id: result.lastInsertRowid,
@@ -75,7 +75,7 @@ router.get('/history', authMiddleware, (req, res) => {
 
     const transactions = db.prepare(`
         SELECT 
-            t.id, t.amount, t.type, t.note, t.created_at,
+            t.id, t.amount, t.type, t.note, t.image_data, t.created_at,
             sender.display_name as from_name, sender.avatar as from_avatar, sender.id as from_id,
             receiver.display_name as to_name, receiver.avatar as to_avatar, receiver.id as to_id
         FROM transactions t

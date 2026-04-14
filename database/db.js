@@ -170,6 +170,10 @@ async function initDB() {
     const schema = fs.readFileSync(SCHEMA_PATH, 'utf-8');
     db.exec(schema);
 
+    // Migrations to add image_data fields dynamically if missing
+    try { db.exec("ALTER TABLE transactions ADD COLUMN image_data TEXT;"); } catch(e) {}
+    try { db.exec("ALTER TABLE missions ADD COLUMN image_data TEXT;"); } catch(e) {}
+
     // Save initial state
     saveToDisk();
 

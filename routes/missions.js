@@ -149,7 +149,7 @@ router.post('/:id/claim', authMiddleware, (req, res) => {
 // ║  auto_condition: JSON string, ej: {"type":"transfers_count","value":5}   ║
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 router.post('/', authMiddleware, adminMiddleware, (req, res) => {
-    const { name, emoji, description, reward, type, auto_condition } = req.body;
+    const { name, emoji, description, reward, type, auto_condition, image_data } = req.body;
 
     if (!name || !reward) {
         return res.status(400).json({ error: 'name y reward son requeridos' });
@@ -157,8 +157,8 @@ router.post('/', authMiddleware, adminMiddleware, (req, res) => {
 
     const db = getDB();
     const result = db.prepare(
-        'INSERT INTO missions (name, emoji, description, reward, type, auto_condition) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(name, emoji || '🎯', description || '', reward, type || 'manual', auto_condition ? JSON.stringify(auto_condition) : null);
+        'INSERT INTO missions (name, emoji, description, reward, type, auto_condition, image_data) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(name, emoji || '🎯', description || '', reward, type || 'manual', auto_condition ? JSON.stringify(auto_condition) : null, image_data || null);
 
     const mission = db.prepare('SELECT * FROM missions WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json({ message: 'Misión creada', mission });
@@ -166,7 +166,7 @@ router.post('/', authMiddleware, adminMiddleware, (req, res) => {
 
 // ── PUT /api/missions/:id — Admin: editar misión ───────────────────────────
 router.put('/:id', authMiddleware, adminMiddleware, (req, res) => {
-    const { name, emoji, description, reward, type, auto_condition, is_active } = req.body;
+    const { name, emoji, description, reward, type, auto_condition, image_data, is_active } = req.body;
     const missionId = parseInt(req.params.id);
     const db = getDB();
 
@@ -181,9 +181,10 @@ router.put('/:id', authMiddleware, adminMiddleware, (req, res) => {
             reward = COALESCE(?, reward),
             type = COALESCE(?, type),
             auto_condition = COALESCE(?, auto_condition),
+            image_data = COALESCE(?, image_data),
             is_active = COALESCE(?, is_active)
         WHERE id = ?
-    `).run(name, emoji, description, reward, type, auto_condition ? JSON.stringify(auto_condition) : null, is_active, missionId);
+    `).run(name, emoji, description, reward, type, auto_condition ? JSON.stringify(auto_condition) : null, image_data || null, is_active, missionId);
 
     const updated = db.prepare('SELECT * FROM missions WHERE id = ?').get(missionId);
     res.json({ message: 'Misión actualizada', mission: updated });

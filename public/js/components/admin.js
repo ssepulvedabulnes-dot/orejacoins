@@ -163,6 +163,10 @@ const AdminComponent = {
                         <input class="form-input" type="number" id="admin-mission-condvalue" placeholder="1" min="1">
                     </div>
                     <div class="form-group full-width">
+                        <label class="form-label">Imagen Opcional</label>
+                        <input class="form-input" type="file" id="admin-mission-image" accept="image/*">
+                    </div>
+                    <div class="form-group full-width">
                         <button class="btn-action" id="btn-add-mission">Crear Misión +</button>
                     </div>
                 </div>
@@ -302,7 +306,19 @@ const AdminComponent = {
 
             if (!name || !reward) return Utils.showToast('Nombre y recompensa son requeridos', 'error');
 
-            const mission = { name, emoji, reward, type, description };
+            const fileInput = document.getElementById('admin-mission-image');
+            let image_data = null;
+            if (fileInput && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                if (file.size > 5 * 1024 * 1024) return Utils.showToast('La imagen es muy grande (máx 5MB)', 'error');
+                image_data = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+            }
+
+            const mission = { name, emoji, reward, type, description, image_data };
 
             if (type === 'auto') {
                 const condType = document.getElementById('admin-mission-condition')?.value;

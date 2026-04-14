@@ -136,10 +136,10 @@ const API = {
     },
 
     // ── TRANSFERS ────────────────────────────────────────────────────────────
-    async transfer(to_user_id, amount, note) {
+    async transfer(to_user_id, amount, note, image_data) {
         return this.request('/transfers', {
             method: 'POST',
-            body: JSON.stringify({ to_user_id, amount, note })
+            body: JSON.stringify({ to_user_id, amount, note, image_data })
         });
     },
 

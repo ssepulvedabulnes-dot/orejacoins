@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     amount INTEGER NOT NULL,
     type TEXT NOT NULL CHECK(type IN ('transfer', 'purchase', 'mission_reward', 'admin_grant')),
     note TEXT,
+    image_data TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (from_user_id) REFERENCES users(id),
     FOREIGN KEY (to_user_id) REFERENCES users(id)
@@ -73,6 +74,7 @@ CREATE TABLE IF NOT EXISTS missions (
     reward INTEGER NOT NULL,
     type TEXT DEFAULT 'manual' CHECK(type IN ('manual', 'auto')),
     auto_condition TEXT,
+    image_data TEXT,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

@@ -84,6 +84,10 @@ const TransferComponent = {
                                 <label class="form-label">Nota (opcional)</label>
                                 <input class="form-input" type="text" id="transfer-note" placeholder="ej. Te debo del almuerzo" value="${this.data.note}">
                             </div>
+                            <div class="form-group">
+                                <label class="form-label">Imagen (opcional)</label>
+                                <input class="form-input" type="file" id="transfer-image" accept="image/*">
+                            </div>
                             <button class="btn-action" id="btn-transfer" ${!this.data.selectedUser ? 'disabled' : ''}>
                                 Transferir →
                             </button>
@@ -102,6 +106,7 @@ const TransferComponent = {
                                                 <div class="tx-info">
                                                     <div class="tx-desc">${isOut ? `→ ${tx.to_name}` : `← ${tx.from_name}`}</div>
                                                     <div class="tx-date">${Utils.formatDate(tx.created_at)}</div>
+                                                    ${tx.image_data ? `<img src="${tx.image_data}" style="max-width: 100%; height: 60px; object-fit: cover; border-radius: 4px; margin-top: 4px;">` : ''}
                                                 </div>
                                                 <div class="tx-amount ${isOut ? 'neg' : 'pos'}">${isOut ? '-' : '+'}${tx.amount} OC</div>
                                             </div>
@@ -135,12 +140,23 @@ const TransferComponent = {
             this.data.note = e.target.value;
         });
 
-        // Transfer button
         document.getElementById('btn-transfer')?.addEventListener('click', async () => {
             const amount = parseInt(this.data.amount);
             if (!this.data.selectedUser) return Utils.showToast('Selecciona un destinatario', 'error');
             if (!amount || amount <= 0) return Utils.showToast('Monto inválido', 'error');
             if (amount > this.data.user.balance) return Utils.showToast('Saldo insuficiente', 'error');
+
+            const fileInput = document.getElementById('transfer-image');
+            let image_data = null;
+            if (fileInput && fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                if (file.size > 5 * 1024 * 1024) return Utils.showToast('La imagen es muy grande (máx 5MB)', 'error');
+                image_data = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(file);
+                });
+            }
 
             const targetUser = this.data.users.find(u => u.id === this.data.selectedUser);
 
@@ -151,7 +167,7 @@ const TransferComponent = {
                 confirmText: 'Enviar',
                 onConfirm: async () => {
                     try {
-                        const result = await API.transfer(this.data.selectedUser, amount, this.data.note);
+                        const result = await API.transfer(this.data.selectedUser, amount, this.data.note, image_data);
                         Utils.showToast(result.message);
                         this.data.amount = '';
                         this.data.note = '';
