@@ -13,7 +13,7 @@ const ArcadeGames = {
     getOrejaImg() {
         if (!this._orejaImg) {
             this._orejaImg = new Image();
-            this._orejaImg.src = '/images/oreja.png';
+            this._orejaImg.src = '/images/oreja.png?v=' + Date.now();
             this._orejaImg.onload = () => { this._imgLoaded = true; };
         }
         return this._orejaImg;
