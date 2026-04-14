@@ -2,6 +2,7 @@
 // OREJACOINS — Arcade Minigames Engine
 // Each game returns a cleanup function and calls onGameOver(score) when done
 // ═══════════════════════════════════════════════════════════════════════════════
+console.log('🎲 ArcadeGames Engine Loaded');
 
 const ArcadeGames = {
 

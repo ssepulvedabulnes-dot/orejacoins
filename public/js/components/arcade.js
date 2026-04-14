@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 // OREJACOINS — Arcade Component (Minigame Hub)
 // ═══════════════════════════════════════════════════════════════════════════════
+console.log('🎮 ArcadeComponent Loaded');
 
 const ArcadeComponent = {
     data: {
